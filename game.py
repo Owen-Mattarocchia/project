@@ -261,7 +261,7 @@ def renderer():
         # If there is text, only show the most recent line
         display_text = lines_of_text[-1] if lines_of_text else ""
         
-        sys.stdout.write("\n" * 3) 
+        sys.stdout.write("\n" * 1) 
         sys.stdout.write(f" > {display_text}")
         
         sys.stdout.flush()
@@ -289,7 +289,7 @@ def ship_animation():
     thread2.join()
     print("\n\n--- MISSION START ---")
 def Welcome():
-    Print("Welcome to ")
+    print("Welcome to ")
     
 
 availible_buttons = ["DIVE", "SETTINGS", "INFO", "QUIT"]
