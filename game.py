@@ -6,8 +6,39 @@ import os
 import random
 import threading
 import shutil
-#upgrades we want for the game: speed, pressure, hp 
-player = str(input("Enter ID Diver: "))
+import json
+
+ 
+SAVE_FILE = "savegame.json"
+
+def save_game():
+    """Writes current player stats to a JSON file."""
+    data = {
+        "name": player,
+        "hp": player_hp,
+        "max_pressure": player_max_pressure,
+        "speed": player_speed,
+        "doubloons": doubloons
+    }
+    with open(SAVE_FILE, "w") as f:
+        json.dump(data, f)
+    print(f"{gold}Game Saved Successfully!{white}")
+
+def load_game():
+    global player, player_hp, player_max_pressure, player_speed, doubloons
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r") as f:
+            data = json.load(f)
+            # Use 'player' to match your global variable name
+            player = data.get("name", "Diver") 
+            player_hp = data.get("hp", 10)
+            player_max_pressure = data.get("max_pressure", 50)
+            player_speed = data.get("speed", 10)
+            doubloons = data.get("doubloons", 5)
+        return True
+    return False
+#upgrades we want for the game: speed, pressure, hp
+player = "Diver"
 player_hp = 10
 player_max_pressure = 50
 player_speed = 10
@@ -21,8 +52,24 @@ blue = "\033[34m"
 player_x, player_y = 0, 0
 current_depth = 0 
 ocean_size_r = 8
-ocean_size_c = shutil.get_terminal_size().columns // 3 # //3 because each cell "[#]" is 3 chars wide
 runs = 0
+menu = None
+while menu == None:
+    menu = str(input("To select a button, type any of the following options: START, LOAD, QUIT ")).upper()
+    if menu == "LOAD":
+        if load_game():
+            print(f"Welcome back, {player}!")
+        elif menu == "START":
+            print("Starting a new game...")
+            player = input("Enter ID Diver: ")
+        elif menu == "QUIT":  
+            runs=0/0
+        else:
+            print("invalid option. Please choose START, LOAD, or QUIT.")
+def get_current_width():
+    """Returns the current number of [ ] cells that fit in the terminal."""
+    cols, _ = shutil.get_terminal_size()
+    return max(1, cols // 3)  # Ensure at least 1 column exists
 #Classes
 class Entity:
     def __init__(self, name, health, damage):
@@ -41,13 +88,13 @@ class Chunk:
         val = 1 / (1 + np.exp(-np.clip(generation, -500, 500))) * np.sqrt(1 / generation)
         self.seed = int(str(val).replace(".", "")[2:10])
     
-    def seed_gen(self):
-        tx = int(self.seed % ocean_size_c)
+    def seed_gen(self, max_cols):
+        tx = int(self.seed % max_cols)
         ty = int((self.seed // 7) % ocean_size_r)
         return tx, ty
         
 seed = Chunk(random.randint(0,19))
-treasure_x, treasure_y = seed.seed_gen()
+treasure_x, treasure_y = seed.seed_gen(get_current_width())
 #Functions
 def clear_terminal():
     # Check the operating system name
@@ -58,6 +105,8 @@ def clear_terminal():
         # Command for Linux, macOS, etc. ('posix' is a common value)
         _ = os.system('clear')
 def draw_grid():
+    global ocean_size_c
+    ocean_size_c = shutil.get_terminal_size().columns // 3 # //3 because each cell "[#]" is 3 chars wide
     clear_terminal()
      
     for r in range(ocean_size_r):
@@ -132,6 +181,13 @@ def Dive():
     sleep(1) 
     
     while True:
+        # Get width at the start of every frame
+        current_w = get_current_width()
+        
+        # Safety: If terminal resized, keep player and treasure inside
+        player_x = min(player_x, current_w - 1)
+        treasure_x = min(treasure_x, current_w - 1)
+        
         draw_grid()
         move = input("> ").lower()
         if move == 'q':
@@ -151,29 +207,29 @@ def Dive():
                 elif current_depth > 0: # If at top of grid but not surface
                     player_y = ocean_size_r - 1
                     current_depth -= 1
-
             elif char == 's': 
                 # Prevents going beyond the bottom row (ocean_size_r - 1)
                 if player_y < ocean_size_r - 1:
                     player_y += 1
+                    
                 else: # If at the bottom, move to next depth
                     player_y = 0
                     current_depth += 1
-
             elif char == 'a': 
                 # Stops at the far left (0)
                 player_x = max(0, player_x - 1)
 
             elif char == 'd': 
                 # Stops at the far right (ocean_size_c - 1)
-                player_x = min(ocean_size_c - 1, player_x + 1)
+                player_x = min(current_w - 1, player_x + 1)
             
             if player_x == treasure_x and player_y == treasure_y:
                 doubloons += 5
-                if seed.seed % 3 == 0: seed.seed += 1233
-                else: seed.seed -= 1233
-                treasure_x, treasure_y = seed.seed_gen() 
-                sleep(0.5)
+                seed.seed = seed.seed + 1245 if seed.seed % 3 == 0 else seed.seed - 3321
+                # Generate new treasure within current window bounds
+                treasure_x, treasure_y = seed.seed_gen(get_current_width())
+                draw_grid() # Visual update for collection
+                sleep(0.2)
 
             draw_grid() 
             sleep(0.3)
@@ -222,14 +278,14 @@ click enter to lock in your choice of movement.,"
 # Shared variables for the "Camera" to render
 current_margin = 0
 current_text = ""
-
+aspeed = 0.1
 def ship_worker():
     """Moves the ship left to right."""
     global current_margin
     columns, _ = shutil.get_terminal_size()
     for x in range(columns):
         current_margin = x
-        sleep(0.1)
+        sleep(aspeed)
 
 def text_worker():
     global char
@@ -237,7 +293,7 @@ def text_worker():
     global current_text
     for char in message:
         current_text += char
-        sleep(0.1)
+        sleep(aspeed)
 
 def renderer():
     
@@ -268,11 +324,12 @@ def renderer():
         if char == "\n":
             sleep(0.125)
         else:
-            sleep(0.03)
+            sleep(aspeed)
         
 
 # 2. Start all tasks together
 def ship_animation():
+    global aspeed
     global current_text, current_margin
     current_text = ""
     current_margin = 0
@@ -288,11 +345,12 @@ def ship_animation():
     # Wait for them to finish
     thread2.join()
     print("\n\n--- MISSION START ---")
+    aspeed = 0.01
 def Welcome():
     print("Welcome to ")
     
 
-availible_buttons = ["DIVE", "SETTINGS", "INFO", "QUIT"]
+availible_buttons = ["DIVE", "SETTINGS", "INFO", "SAVE", "LOAD", "QUIT"]
 current_button = None
 print(availible_buttons)
 while current_button != "QUIT":
@@ -307,6 +365,13 @@ while current_button != "QUIT":
     
     elif current_button == "INFO":
         Info()
+    elif current_button == "SAVE":
+        save_game()
+    elif current_button == "LOAD":
+        if load_game():
+            print("Game Loaded Successfully!")
+        else:
+            print("No save file found.")
     elif current_button == "QUIT":
         print("Exiting Game...")
         sys.exit()

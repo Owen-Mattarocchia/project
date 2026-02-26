@@ -10,5 +10,5 @@
     "python.testing.unittestEnabled": true,
     "liveshare.allowGuestDebugControl": true,
     "liveshare.allowGuestTaskControl": true,
-    "liveshare.alwaysFollowHost": true
+    "liveshare.alwaysFollowHost": false
 }
